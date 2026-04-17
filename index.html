@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ブラウザアラーム</title>
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        background-color: #000000;
+        color: #e0e0e0;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+        transition: background-color 0.1s, color 0.1s;
+    }
+
+    @keyframes blink-animation {
+        0% { background-color: #000000; color: #e0e0e0; }
+        50% { background-color: #ffffff; color: #000000; }
+        100% { background-color: #000000; color: #e0e0e0; }
+    }
+
+    body.is-ringing {
+        animation: blink-animation 1.5s infinite;
+        cursor: pointer;
+    }
+
+    .sidebar {
+        background-color: #1e1e1e;
+        width: 280px;
+        padding: 20px;
+        box-sizing: border-box;
+        border-radius: 20px;
+        margin: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        z-index: 2;
+    }
+
+    .input-area {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .input-field {
+        background-color: #2c2c2c;
+        border: 2px solid #3a3a3a;
+        color: #fff;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 16px;
+        outline: none;
+        box-sizing: border-box;
+        width: 100%;
+        text-align: center;
+    }
+
+    .input-field::placeholder {
+        color: #888;
+    }
+
+    .input-field:focus {
+        border-color: #555;
+    }
+
+    input[type="time"]::-webkit-calendar-picker-indicator {
+        filter: invert(1);
+        cursor: pointer;
+    }
+
+    .time-add-row {
+        display: flex;
+        gap: 10px;
+    }
+
+    .add-btn {
+        background-color: #2c2c2c;
+        color: #fff;
+        border: 2px solid #3a3a3a;
+        border-radius: 8px;
+        font-size: 24px;
+        font-weight: normal;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        width: 60px;
+        flex-shrink: 0;
+    }
+
+    .add-btn:hover {
+        background-color: #4a4a4a;
+    }
+
+    .alarm-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        overflow-y: auto;
+    }
+
+    .alarm-item {
+        background-color: #2c2c2c;
+        border-radius: 8px;
+        border: 1px solid #444;
+        display: flex;
+        align-items: stretch;
+        min-height: 60px;
+        overflow: hidden;
+    }
+
+    .alarm-content {
+        flex: 1;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .alarm-content .title {
+        font-size: 14px;
+        margin-bottom: 4px;
+        color: #bbb;
+        min-height: 14px;
+    }
+
+    .alarm-content .time {
+        font-size: 28px;
+        font-weight: bold;
+        color: #fff;
+    }
+
+    .delete-btn {
+        background-color: #4a2c2c;
+        color: #ffaaaa;
+        border: none;
+        width: 50px;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 18px;
+        transition: background-color 0.2s, color 0.2s;
+    }
+
+    .delete-btn:hover {
+        background-color: #c0392b;
+        color: #fff;
+    }
+
+    .main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        position: relative; 
+        z-index: 1;
+        pointer-events: none;
+        overflow: hidden;
+    }
+
+    .upcoming-text {
+        font-size: clamp(24px, 3vw, 40px); /* 画面サイズに応じて可変 */
+        font-weight: bold;
+        margin-bottom: 20px;
+        color: inherit;
+    }
+
+    .clock {
+        /* clamp(最小サイズ, 推奨サイズ, 最大サイズ) でウィンドウ幅に追従 */
+        font-size: clamp(100px, 16vw, 320px); 
+        font-weight: bold;
+        letter-spacing: 5px;
+        line-height: 1;
+        color: inherit;
+        white-space: nowrap;
+    }
+
+    .date {
+        font-size: clamp(20px, 2.5vw, 40px); /* 日付も画面サイズに応じて可変 */
+        margin-top: 10px;
+        color: inherit;
+        opacity: 0.7;
+    }
+</style>
+</head>
+<body>
+
+    <aside class="sidebar" style="pointer-events: auto;">
+        <div class="input-area">
+            <input type="text" id="alarm-title" class="input-field" placeholder="タイトルを入力">
+            <div class="time-add-row">
+                <input type="time" id="alarm-time" class="input-field" required>
+                <button class="add-btn" onclick="addAlarm()">+</button>
+            </div>
+        </div>
+        <div class="alarm-list" id="alarm-list"></div>
+    </aside>
+
+    <main class="main-content">
+        <div class="upcoming-text" id="upcoming-text">アラームなし</div>
+        <div class="clock" id="clock">00:00:00</div>
+        <div class="date" id="date">0000/00/00(曜)</div>
+    </main>
+
+    <script>
+        let alarms = JSON.parse(localStorage.getItem('alarms')) || [];
+        let isRinging = false;
+        let stopTimeout;
+
+        function saveAlarms() {
+            localStorage.setItem('alarms', JSON.stringify(alarms));
+        }
+
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            
+            document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;
+
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const date = String(now.getDate()).padStart(2, '0');
+            const days = ['日', '月', '火', '水', '木', '金', '土'];
+            const dayOfWeek = days[now.getDay()];
+            
+            document.getElementById('date').textContent = `${year}/${month}/${date}(${dayOfWeek})`;
+
+            checkAlarms(hours, minutes, seconds);
+            updateUpcomingText(now);
+        }
+
+        function addAlarm() {
+            let titleInput = document.getElementById('alarm-title').value.trim();
+            const timeInput = document.getElementById('alarm-time').value;
+
+            if (!timeInput) return;
+
+            if (!titleInput) {
+                titleInput = "無名のアラーム";
+            }
+
+            alarms.push({
+                time: timeInput,
+                title: titleInput,
+                isActive: true
+            });
+
+            alarms.sort((a, b) => a.time.localeCompare(b.time));
+            saveAlarms();
+            renderAlarms();
+
+            document.getElementById('alarm-title').value = '';
+            document.getElementById('alarm-time').value = '';
+        }
+
+        function deleteAlarm(index) {
+            alarms.splice(index, 1);
+            saveAlarms();
+            renderAlarms();
+            updateUpcomingText(new Date());
+        }
+
+        function renderAlarms() {
+            const listElement = document.getElementById('alarm-list');
+            listElement.innerHTML = '';
+
+            alarms.forEach((alarm, index) => {
+                const item = document.createElement('div');
+                item.className = 'alarm-item';
+                item.innerHTML = `
+                    <div class="alarm-content">
+                        <div class="title">${alarm.title}</div>
+                        <div class="time">${alarm.time}</div>
+                    </div>
+                    <button class="delete-btn" onclick="deleteAlarm(${index})" title="削除">🗑️</button>
+                `;
+                listElement.appendChild(item);
+            });
+        }
+
+        function checkAlarms(h, m, s) {
+            const currentTime = `${h}:${m}`;
+            
+            if (s === '00' && !isRinging) {
+                let triggered = false;
+                alarms.forEach(alarm => {
+                    if (alarm.time === currentTime && alarm.isActive) {
+                        alarm.isActive = false; 
+                        triggered = true;
+                    }
+                });
+
+                if (triggered) {
+                    saveAlarms();
+                    renderAlarms();
+                    startAlarm();
+                }
+            }
+        }
+
+        function startAlarm() {
+            isRinging = true;
+            document.body.classList.add('is-ringing');
+
+            clearTimeout(stopTimeout);
+            stopTimeout = setTimeout(() => {
+                stopAlarm();
+            }, 15000);
+        }
+
+        function stopAlarm() {
+            if (isRinging) {
+                isRinging = false;
+                document.body.classList.remove('is-ringing');
+                clearTimeout(stopTimeout);
+            }
+        }
+
+        document.body.addEventListener('click', stopAlarm);
+
+        function updateUpcomingText(now) {
+            const activeAlarms = alarms.filter(a => a.isActive);
+            if (activeAlarms.length === 0) {
+                document.getElementById('upcoming-text').textContent = 'アラームなし';
+                return;
+            }
+
+            const currentMinutesTotal = now.getHours() * 60 + now.getMinutes();
+            let minDiff = Infinity;
+            let nextAlarmTitle = '';
+
+            activeAlarms.forEach(alarm => {
+                const [h, m] = alarm.time.split(':').map(Number);
+                let alarmMinutesTotal = h * 60 + m;
+
+                if (alarmMinutesTotal < currentMinutesTotal) {
+                    alarmMinutesTotal += 24 * 60;
+                }
+
+                const diff = alarmMinutesTotal - currentMinutesTotal;
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    nextAlarmTitle = alarm.title;
+                }
+            });
+
+            const titleDisplay = nextAlarmTitle ? ` ${nextAlarmTitle}` : '';
+            document.getElementById('upcoming-text').textContent = `${minDiff}分後${titleDisplay}`;
+        }
+
+        renderAlarms();
+        setInterval(updateClock, 1000);
+        updateClock();
+    </script>
+</body>
+</html>
