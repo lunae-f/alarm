@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ブラウザアラーム</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e1e1e">
 <style>
     body {
         margin: 0;
@@ -165,14 +167,13 @@
     }
 
     .upcoming-text {
-        font-size: clamp(24px, 3vw, 40px); /* 画面サイズに応じて可変 */
+        font-size: clamp(24px, 3vw, 40px);
         font-weight: bold;
         margin-bottom: 20px;
         color: inherit;
     }
 
     .clock {
-        /* clamp(最小サイズ, 推奨サイズ, 最大サイズ) でウィンドウ幅に追従 */
         font-size: clamp(100px, 16vw, 320px); 
         font-weight: bold;
         letter-spacing: 5px;
@@ -182,7 +183,7 @@
     }
 
     .date {
-        font-size: clamp(20px, 2.5vw, 40px); /* 日付も画面サイズに応じて可変 */
+        font-size: clamp(20px, 2.5vw, 40px);
         margin-top: 10px;
         color: inherit;
         opacity: 0.7;
@@ -359,6 +360,19 @@
         renderAlarms();
         setInterval(updateClock, 1000);
         updateClock();
+
+        // --- PWA: Service Worker の登録 ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                .then(registration => {
+                    console.log('ServiceWorker registration successful');
+                })
+                .catch(err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
     </script>
 </body>
 </html>
